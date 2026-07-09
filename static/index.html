@@ -1,0 +1,71 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Realtime Deepfake Detector</title>
+  <style>
+    body { font-family: Arial, sans-serif; display:flex; gap:16px; padding:16px }
+    video, canvas { border:1px solid #ccc; }
+    #status { margin-top:8px }
+  </style>
+</head>
+<body>
+  <div>
+    <video id="video" autoplay playsinline width="480" height="360"></video>
+    <div id="status">Connecting...</div>
+  </div>
+  <div>
+    <canvas id="canvas" width="480" height="360" style="display:none"></canvas>
+    <div id="result"><strong>Prediction:</strong> <span id="pred">—</span> <span id="conf"></span></div>
+  </div>
+
+<script>
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const predEl = document.getElementById('pred');
+const confEl = document.getElementById('conf');
+const statusEl = document.getElementById('status');
+
+let ws;
+function connect() {
+  const loc = window.location;
+  const wsUrl = (loc.protocol === 'https:' ? 'wss://' : 'ws://') + loc.host + '/ws';
+  ws = new WebSocket(wsUrl);
+  ws.onopen = () => { statusEl.textContent = 'Connected'; startStream(); };
+  ws.onmessage = (ev) => {
+    try {
+      const data = JSON.parse(ev.data);
+      if (data.error) {
+        statusEl.textContent = 'Error: ' + data.error;
+        return;
+      }
+      predEl.textContent = data.prediction;
+      confEl.textContent = '(' + data.confidence + '%)';
+    } catch(e) { console.error(e); }
+  };
+  ws.onclose = () => { statusEl.textContent = 'Disconnected — retrying in 2s'; setTimeout(connect,2000); };
+}
+
+async function startStream() {
+  if (!navigator.mediaDevices) {
+    statusEl.textContent = 'No webcam support';
+    return;
+  }
+  const stream = await navigator.mediaDevices.getUserMedia({video:true});
+  video.srcObject = stream;
+
+  const sendFrame = () => {
+    if (ws.readyState !== WebSocket.OPEN) return;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+    ws.send(JSON.stringify({frame: dataUrl}));
+  };
+  // send every 250ms
+  setInterval(sendFrame, 250);
+}
+
+connect();
+</script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+deepfake-detector/
+│
+├── app.py
+├── detector.py
+├── requirements.txt
+├── uploads/
+└── README.md
