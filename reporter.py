@@ -24,12 +24,23 @@ class DeepfakeReporter:
 
     @staticmethod
     def _face_rois(frame: np.ndarray, scaleFactor=1.1, minNeighbors=5):
-        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        faces = face_cascade.detectMultiScale(gray, scaleFactor=scaleFactor, minNeighbors=minNeighbors)
         rois = []
-        for (x, y, w, h) in faces:
-            rois.append((x, y, w, h, frame[y:y+h, x:x+w]))
+        if hasattr(cv2, 'CascadeClassifier') and hasattr(cv2.data, 'haarcascades'):
+            cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+            try:
+                face_cascade = cv2.CascadeClassifier(cascade_path)
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                faces = face_cascade.detectMultiScale(gray, scaleFactor=scaleFactor, minNeighbors=minNeighbors)
+                for (x, y, w, h) in faces:
+                    rois.append((x, y, w, h, frame[y:y+h, x:x+w]))
+            except Exception:
+                rois = []
+
+        if not rois:
+            # Fallback: use the full frame when face cascade is unavailable or detection fails.
+            h, w = frame.shape[:2]
+            rois.append((0, 0, w, h, frame))
+
         return rois
 
     @staticmethod
