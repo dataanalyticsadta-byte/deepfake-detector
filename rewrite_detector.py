@@ -1,4 +1,5 @@
-﻿from PIL import Image
+from pathlib import Path
+content = '''from PIL import Image
 
 from reporter import DeepfakeReporter
 
@@ -26,7 +27,7 @@ def predict_pil(image):
     report = reporter.analyze_frames([image])
     fake_score = _score_from_report(report)
 
-    if fake_score < 0.20:
+    if fake_score < 0.25:
         prediction = "Looks Real"
     elif fake_score < 0.60:
         prediction = "Potentially Altered"
@@ -38,3 +39,6 @@ def predict_pil(image):
         "confidence": round(fake_score * 100, 2),
         "report": report
     }
+'''
+Path('detector.py').write_text(content, encoding='utf-8')
+print('rewrote detector.py')

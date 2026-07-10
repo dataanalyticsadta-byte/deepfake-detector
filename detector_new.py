@@ -1,4 +1,4 @@
-﻿from PIL import Image
+from PIL import Image
 
 from reporter import DeepfakeReporter
 
@@ -26,7 +26,7 @@ def predict_pil(image):
     report = reporter.analyze_frames([image])
     fake_score = _score_from_report(report)
 
-    if fake_score < 0.20:
+    if fake_score < 0.25:
         prediction = "Looks Real"
     elif fake_score < 0.60:
         prediction = "Potentially Altered"

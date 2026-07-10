@@ -108,7 +108,9 @@ async def analyze(file: UploadFile):
 
 @app.websocket('/ws')
 async def websocket_endpoint(websocket: WebSocket):
+    print('WebSocket attempt to connect')
     await websocket.accept()
+    print('WebSocket accepted')
     try:
         while True:
             data = await websocket.receive_text()
@@ -127,10 +129,19 @@ async def websocket_endpoint(websocket: WebSocket):
                 img_bytes = base64.b64decode(b64)
                 img = Image.open(BytesIO(img_bytes)).convert('RGB')
             except Exception as e:
+                print('WebSocket received invalid image:', e)
                 await websocket.send_text(json.dumps({'error': 'invalid image', 'detail': str(e)}))
                 continue
 
             result = predict_pil(img)
             await websocket.send_text(json.dumps(result))
     except WebSocketDisconnect:
+        print('WebSocket disconnected')
+        return
+    except Exception as e:
+        print('WebSocket error:', e)
+        try:
+            await websocket.close()
+        except Exception:
+            pass
         return
