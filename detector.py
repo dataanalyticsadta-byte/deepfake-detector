@@ -26,15 +26,25 @@ def predict_pil(image):
     report = reporter.analyze_frames([image])
     fake_score = _score_from_report(report)
 
-    if fake_score < 0.20:
+    if fake_score < 0.25:
         prediction = "Looks Real"
-    elif fake_score < 0.60:
+    elif fake_score < 0.65:
         prediction = "Potentially Altered"
     else:
         prediction = "Potential Fake"
 
+    reason_scores = {label: round(score * 100, 1) for label, score in report.get('scores', {}).items()}
+    reasons = [label for label, score in reason_scores.items() if score > 50]
+    reason_details = {
+        label: report.get('verdicts', {}).get(label, {}).get('explanation', '')
+        for label in reasons
+    }
+
     return {
         "prediction": prediction,
         "confidence": round(fake_score * 100, 2),
+        "reason_scores": reason_scores,
+        "reasons": reasons,
+        "reason_details": reason_details,
         "report": report
     }

@@ -60,7 +60,20 @@ export default function App(){
           <div>Status: {wsStatus}</div>
           <div>
             <strong>Realtime prediction:</strong>
-            <pre>{prediction? JSON.stringify(prediction, null, 2): '—'}</pre>
+            <div>{prediction ? `${prediction.prediction} (${prediction.confidence}%)` : '—'}</div>
+            {prediction?.reason_scores && (
+              <div>
+                <strong>Reason scores:</strong>
+                <ul>
+                  {Object.entries(prediction.reason_scores).map(([label, score]) => (
+                    <li key={label}>
+                      {label}: {score}% {prediction.reasons?.includes(label) ? '(flagged)' : ''}
+                      {prediction.reason_details?.[label] ? ` — ${prediction.reason_details[label]}` : ''}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         </div>
         <div className="right">
