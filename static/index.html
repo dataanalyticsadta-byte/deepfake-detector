@@ -17,6 +17,7 @@
   <div>
     <canvas id="canvas" width="480" height="360" style="display:none"></canvas>
     <div id="result"><strong>Prediction:</strong> <span id="pred">—</span> <span id="conf"></span></div>
+    <div id="reasons" style="margin-top:12px"></div>
   </div>
 
 <script>
@@ -40,8 +41,24 @@ function connect() {
         statusEl.textContent = 'Error: ' + data.error;
         return;
       }
-      predEl.textContent = data.prediction;
-      confEl.textContent = '(' + data.confidence + '%)';
+      predEl.textContent = data.prediction || '—';
+      confEl.textContent = data.confidence !== undefined ? '(' + data.confidence + '%)' : '';
+
+      // Render reason scores and explanations when available
+      const reasonsEl = document.getElementById('reasons');
+      if (data.reason_scores && Object.keys(data.reason_scores).length > 0) {
+        let html = '<strong>Reason scores</strong>';
+        html += '<ul>';
+        Object.entries(data.reason_scores).forEach(([label, score]) => {
+          const flagged = (data.reasons || []).includes(label);
+          const explanation = (data.reason_details || {})[label] || '';
+          html += '<li>' + label + ': ' + score + '% ' + (flagged ? '<em>(flagged)</em>' : '') + (explanation ? ' — ' + explanation : '') + '</li>';
+        });
+        html += '</ul>';
+        reasonsEl.innerHTML = html;
+      } else {
+        reasonsEl.innerHTML = '';
+      }
     } catch(e) { console.error(e); }
   };
   ws.onclose = () => { statusEl.textContent = 'Disconnected — retrying in 2s'; setTimeout(connect,2000); };

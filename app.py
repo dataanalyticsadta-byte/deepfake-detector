@@ -77,13 +77,11 @@ async def analyze(file: UploadFile):
     if upload_type == 'image' or upload_type is None:
         try:
             image = Image.open(filepath).convert('RGB')
-            report = DeepfakeReporter().analyze_frames([image])
             prediction = predict_pil(image)
             return {
                 'type': 'image',
                 'filename': filename,
-                'prediction': prediction,
-                'report': report,
+                **prediction,
             }
         except Exception as e:
             if upload_type == 'image':
