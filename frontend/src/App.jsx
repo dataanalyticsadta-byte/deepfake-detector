@@ -46,7 +46,7 @@ export default function App(){
     try{
       const res = await fetch('/analyze', {method:'POST', body: form})
       const j = await res.json()
-      setUploadResult(JSON.stringify(j, null, 2))
+      setUploadResult(j)
     }catch(err){ setUploadResult('error: '+err.message) }
   }
 
@@ -61,6 +61,12 @@ export default function App(){
           <div>
             <strong>Realtime prediction:</strong>
             <div>{prediction ? `${prediction.prediction} (${prediction.confidence}%)` : '—'}</div>
+            {prediction?.breakdown && (
+              <div>
+                <strong>Overall:</strong>
+                <div>AI: {prediction.breakdown.AI}% — Real: {prediction.breakdown.Real}%</div>
+              </div>
+            )}
             {prediction?.reason_scores && (
               <div>
                 <strong>Reason scores:</strong>
@@ -80,7 +86,25 @@ export default function App(){
           <h2>Upload file</h2>
           <input type="file" accept="image/*,video/*" onChange={handleUpload} />
           <h3>Result</h3>
-          <pre>{uploadResult}</pre>
+          {uploadResult && typeof uploadResult === 'object' ? (
+            <div>
+              <div><strong>Prediction:</strong> {uploadResult.prediction} ({uploadResult.confidence}%)</div>
+              {uploadResult.breakdown && <div><strong>Overall:</strong> AI: {uploadResult.breakdown.AI}% — Real: {uploadResult.breakdown.Real}%</div>}
+              {uploadResult.reason_scores && (
+                <div>
+                  <strong>Reason scores:</strong>
+                  <ul>
+                    {Object.entries(uploadResult.reason_scores).map(([label, score]) => (
+                      <li key={label}>{label}: {score}% {uploadResult.reasons?.includes(label) ? '(flagged)' : ''}{uploadResult.reason_details?.[label] ? ` — ${uploadResult.reason_details[label]}` : ''}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <pre style={{background:'#f6f6f6', padding:8}}>{JSON.stringify(uploadResult.report || {}, null, 2)}</pre>
+            </div>
+          ) : (
+            <pre>{uploadResult}</pre>
+          )}
         </div>
       </div>
     </div>

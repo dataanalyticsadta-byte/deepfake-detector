@@ -110,6 +110,9 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     print('WebSocket accepted')
     try:
+        frame_buffer = []
+        MAX_BUFFER = 8  # use last N frames for smoother heuristics
+        MIN_FRAMES = 3
         while True:
             data = await websocket.receive_text()
             # Expect JSON: {"frame": "<base64jpeg>"}
@@ -131,7 +134,23 @@ async def websocket_endpoint(websocket: WebSocket):
                 await websocket.send_text(json.dumps({'error': 'invalid image', 'detail': str(e)}))
                 continue
 
-            result = predict_pil(img)
+            # maintain rolling buffer
+            frame_buffer.append(img)
+            if len(frame_buffer) > MAX_BUFFER:
+                frame_buffer.pop(0)
+
+            # only analyze when we have a few frames for temporal heuristics
+            try:
+                if len(frame_buffer) >= MIN_FRAMES:
+                    from detector import predict_frames
+                    result = predict_frames(frame_buffer)
+                else:
+                    # fallback to single-frame prediction
+                    result = predict_pil(img)
+            except Exception as e:
+                print('Prediction error:', e)
+                result = {'error': 'prediction_failed', 'detail': str(e)}
+
             await websocket.send_text(json.dumps(result))
     except WebSocketDisconnect:
         print('WebSocket disconnected')

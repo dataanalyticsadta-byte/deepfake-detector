@@ -40,7 +40,24 @@ button.addEventListener('click', async () => {
       body: form,
     });
     const data = await resp.json();
-    output.textContent = JSON.stringify(data, null, 2);
+    // If breakdown present, render a friendly view
+    if (data.breakdown) {
+      let html = `<div><strong>Prediction:</strong> ${data.prediction} (${data.confidence}%)</div>`;
+      html += `<div><strong>Overall:</strong> AI: ${data.breakdown.AI}% — Real: ${data.breakdown.Real}%</div>`;
+      if (data.reason_scores) {
+        html += '<div><strong>Reason scores:</strong><ul>';
+        Object.entries(data.reason_scores).forEach(([label, score]) => {
+          const flagged = (data.reasons || []).includes(label) ? ' <em>(flagged)</em>' : '';
+          const explanation = (data.reason_details || {})[label] ? ' — ' + (data.reason_details || {})[label] : '';
+          html += `<li>${label}: ${score}%${flagged}${explanation}</li>`;
+        });
+        html += '</ul></div>';
+      }
+      html += `<pre>${JSON.stringify(data.report || {}, null, 2)}</pre>`;
+      output.innerHTML = html;
+    } else {
+      output.textContent = JSON.stringify(data, null, 2);
+    }
     message.textContent = 'Analysis complete.';
   } catch (err) {
     message.textContent = 'Upload failed: ' + err.message;

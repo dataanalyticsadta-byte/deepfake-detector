@@ -22,8 +22,14 @@ def _score_from_report(report):
 
 
 def predict_pil(image):
-    image = image.convert("RGB")
-    report = reporter.analyze_frames([image])
+    # Single-image wrapper that delegates to predict_frames
+    return predict_frames([image])
+
+
+def predict_frames(pil_frames):
+    # Ensure PIL images
+    frames = [p.convert('RGB') for p in pil_frames]
+    report = reporter.analyze_frames(frames)
     fake_score = _score_from_report(report)
 
     if fake_score < 0.25:
@@ -33,6 +39,7 @@ def predict_pil(image):
     else:
         prediction = "Potential Fake"
 
+    # Overall per-reason percentage scores (0-100)
     reason_scores = {label: round(score * 100, 1) for label, score in report.get('scores', {}).items()}
     reasons = [label for label, score in reason_scores.items() if score > 50]
     reason_details = {
@@ -40,9 +47,14 @@ def predict_pil(image):
         for label in reasons
     }
 
+    # Simple overall breakdown between AI (fake) and Real
+    ai_percent = round(fake_score * 100, 1)
+    real_percent = round((1.0 - fake_score) * 100, 1)
+
     return {
         "prediction": prediction,
         "confidence": round(fake_score * 100, 2),
+        "breakdown": {"AI": ai_percent, "Real": real_percent},
         "reason_scores": reason_scores,
         "reasons": reasons,
         "reason_details": reason_details,
