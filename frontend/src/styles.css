@@ -1,0 +1,5 @@
+body { font-family: Arial, sans-serif; padding: 20px; }
+.app .container { display:flex; gap:20px }
+.left, .right { flex:1 }
+video { border: 1px solid #ccc }
+pre { background:#f6f8fa; padding:10px; border-radius:6px }

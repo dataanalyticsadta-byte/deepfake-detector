@@ -25,8 +25,8 @@ uvicorn app:app --host 0.0.0.0 --port 8000 --reload
 
 ## Use
 
-- Realtime webcam detection: `http://localhost:8000/static/index.html`
-- Upload image/video file: `http://localhost:8000/static/upload.html`
+- Realtime webcam detection: `http://localhost:8000/webcam`
+- Upload image/video file: `http://localhost:8000/upload`
 
 Supported uploads: JPG, JPEG, PNG, WEBP, BMP, TIFF, GIF, MP4, MOV, AVI, MKV, WEBM, FLV, MPEG.
 

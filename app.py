@@ -1,4 +1,5 @@
 from fastapi import FastAPI, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
 import shutil
 import os
 import base64
@@ -22,10 +23,24 @@ from fastapi.staticfiles import StaticFiles
 if os.path.isdir('static'):
     app.mount('/static', StaticFiles(directory='static'), name='static')
 
+# If a frontend build exists, serve it at root paths.
+if os.path.isdir('frontend/dist'):
+    app.mount('/', StaticFiles(directory='frontend/dist', html=True), name='frontend')
+
 
 @app.get("/")
 def home():
     return {"message": "Deepfake Detector Prototype"}
+
+
+@app.get('/webcam')
+def webcam_page():
+    return FileResponse(os.path.join('static', 'index.html'))
+
+
+@app.get('/upload')
+def upload_page():
+    return FileResponse(os.path.join('static', 'upload.html'))
 
 
 @app.post("/detect")
