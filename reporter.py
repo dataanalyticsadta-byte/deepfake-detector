@@ -166,6 +166,11 @@ class DeepfakeReporter:
         eye_freeze_ratio = float(np.mean((left_specs + right_specs) < 0.0005))
         eye_score = float(np.clip(eye_freeze_ratio * 5.0, 0.0, 1.0))
 
+        frame_count = len(per_face_metrics)
+        if frame_count < 2:
+            lip_score = 0.0
+            eye_score = 0.0
+
         report = {
             'summary': 'Aggregated deepfake diagnostic',
             'scores': {
@@ -176,7 +181,7 @@ class DeepfakeReporter:
                 'AI-generated compression artifacts': round(compression_score, 3),
             },
             'details': {
-                'frames_analyzed': len(per_face_metrics),
+                'frames_analyzed': frame_count,
                 'laplacian_mean': float(np.mean(lap_vars)),
                 'blockiness_mean': float(np.mean(blocks)),
             }
