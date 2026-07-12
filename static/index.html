@@ -55,6 +55,10 @@ function connect() {
           html += '<li>' + label + ': ' + score + '% ' + (flagged ? '<em>(flagged)</em>' : '') + (explanation ? ' — ' + explanation : '') + '</li>';
         });
         html += '</ul>';
+        // show classifier/combined score if present
+        if (data.classifier_score !== undefined && data.classifier_score !== null) {
+          html = '<div><strong>Classifier:</strong> ' + data.classifier_score + '% — <strong>Combined:</strong> ' + data.combined_score + '%</div>' + html;
+        }
         reasonsEl.innerHTML = html;
       } else {
         reasonsEl.innerHTML = '';

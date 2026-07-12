@@ -65,6 +65,9 @@ export default function App(){
               <div>
                 <strong>Overall:</strong>
                 <div>AI: {prediction.breakdown.AI}% — Real: {prediction.breakdown.Real}%</div>
+                {prediction?.classifier_score !== undefined && prediction.classifier_score !== null && (
+                  <div>Classifier: {prediction.classifier_score}% — Combined: {prediction.combined_score}%</div>
+                )}
               </div>
             )}
             {prediction?.reason_scores && (
@@ -90,6 +93,9 @@ export default function App(){
             <div>
               <div><strong>Prediction:</strong> {uploadResult.prediction} ({uploadResult.confidence}%)</div>
               {uploadResult.breakdown && <div><strong>Overall:</strong> AI: {uploadResult.breakdown.AI}% — Real: {uploadResult.breakdown.Real}%</div>}
+              {uploadResult.classifier_score !== undefined && uploadResult.classifier_score !== null && (
+                <div><strong>Classifier:</strong> {uploadResult.classifier_score}% — <strong>Combined:</strong> {uploadResult.combined_score}%</div>
+              )}
               {uploadResult.reason_scores && (
                 <div>
                   <strong>Reason scores:</strong>

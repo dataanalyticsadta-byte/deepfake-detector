@@ -4,6 +4,14 @@ from PIL import Image
 import math
 from typing import List, Dict, Optional
 
+# Try to use MediaPipe Face Mesh for robust face localization and landmarks
+try:
+    import mediapipe as mp
+    MP_AVAILABLE = True
+    mp_face_mesh = mp.solutions.face_mesh
+except Exception:
+    MP_AVAILABLE = False
+
 
 class DeepfakeReporter:
     """Produces a human-readable report with heuristic scores for common deepfake artifacts.
@@ -25,21 +33,50 @@ class DeepfakeReporter:
     @staticmethod
     def _face_rois(frame: np.ndarray, scaleFactor=1.1, minNeighbors=5):
         rois = []
-        if hasattr(cv2, 'CascadeClassifier') and hasattr(cv2.data, 'haarcascades'):
+        # Prefer MediaPipe Face Mesh if available for accurate landmarks and bounding boxes
+        if MP_AVAILABLE:
+            try:
+                h, w = frame.shape[:2]
+                with mp_face_mesh.FaceMesh(static_image_mode=True) as fm:
+                    img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    results = fm.process(img_rgb)
+                    if results and results.multi_face_landmarks:
+                        for face_landmarks in results.multi_face_landmarks:
+                            # compute bounding box from landmarks
+                            xs = [lm.x for lm in face_landmarks.landmark]
+                            ys = [lm.y for lm in face_landmarks.landmark]
+                            x_min = int(max(0, min(xs) * w))
+                            x_max = int(min(w, max(xs) * w))
+                            y_min = int(max(0, min(ys) * h))
+                            y_max = int(min(h, max(ys) * h))
+                            # expand slightly
+                            pad_x = int((x_max - x_min) * 0.12)
+                            pad_y = int((y_max - y_min) * 0.16)
+                            x1 = max(0, x_min - pad_x)
+                            y1 = max(0, y_min - pad_y)
+                            x2 = min(w, x_max + pad_x)
+                            y2 = min(h, y_max + pad_y)
+                            roi = frame[y1:y2, x1:x2]
+                            rois.append((x1, y1, x2 - x1, y2 - y1, roi, face_landmarks))
+            except Exception:
+                rois = []
+
+        # Fallback to Haar cascade if MediaPipe missing or failed
+        if not rois and hasattr(cv2, 'CascadeClassifier') and hasattr(cv2.data, 'haarcascades'):
             cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
             try:
                 face_cascade = cv2.CascadeClassifier(cascade_path)
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                 faces = face_cascade.detectMultiScale(gray, scaleFactor=scaleFactor, minNeighbors=minNeighbors)
                 for (x, y, w, h) in faces:
-                    rois.append((x, y, w, h, frame[y:y+h, x:x+w]))
+                    rois.append((x, y, w, h, frame[y:y+h, x:x+w], None))
             except Exception:
                 rois = []
 
         if not rois:
-            # Fallback: use the full frame when face cascade is unavailable or detection fails.
+            # Fallback: use the full frame when face detection fails.
             h, w = frame.shape[:2]
-            rois.append((0, 0, w, h, frame))
+            rois.append((0, 0, w, h, frame, None))
 
         return rois
 
@@ -84,6 +121,36 @@ class DeepfakeReporter:
         return left_eye, right_eye, mouth
 
     @staticmethod
+    def _landmark_eye_aspect_ratio(landmarks, indices, bbox):
+        # landmarks: mediapipe face_landmarks, indices: list of idx for eye contour
+        # bbox: (x,y,w,h) of ROI in original image for converting normalized coords
+        h, w = bbox[3], bbox[2]
+        # convert normalized MP coords to pixel coords within bbox
+        pts = []
+        for idx in indices:
+            lm = landmarks.landmark[idx]
+            px = int((lm.x * w))
+            py = int((lm.y * h))
+            pts.append((px, py))
+        if len(pts) < 6:
+            return 0.0
+        # EAR formula: (|p2-p6| + |p3-p5|) / (2*|p1-p4|)
+        p1, p2, p3, p4, p5, p6 = pts[0:6]
+        def dist(a,b):
+            return math.hypot(a[0]-b[0], a[1]-b[1])
+        ear = (dist(p2,p6) + dist(p3,p5)) / (2.0 * (dist(p1,p4) + 1e-9))
+        return float(ear)
+
+    @staticmethod
+    def _landmark_mouth_opening(landmarks, top_idx, bottom_idx, bbox):
+        h, w = bbox[3], bbox[2]
+        lt = landmarks.landmark[top_idx]
+        lb = landmarks.landmark[bottom_idx]
+        top = (int(lt.x * w), int(lt.y * h))
+        bot = (int(lb.x * w), int(lb.y * h))
+        return float(math.hypot(top[0]-bot[0], top[1]-bot[1]))
+
+    @staticmethod
     def _specular_highlights(region: np.ndarray) -> float:
         # bright-spot ratio in region (percentage of very bright pixels)
         gray = cv2.cvtColor(region, cv2.COLOR_BGR2GRAY)
@@ -99,7 +166,7 @@ class DeepfakeReporter:
         if not rois:
             return {'faces': []}
 
-        for (x, y, w, h, roi) in rois:
+        for (x, y, w, h, roi, landmarks) in rois:
             gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
             lap_var = self._laplacian_variance(gray)
             blockiness = self._blockiness_score(gray)
@@ -110,14 +177,40 @@ class DeepfakeReporter:
             mouth_gray = cv2.cvtColor(mouth, cv2.COLOR_BGR2GRAY)
             mouth_contrast = float(np.std(mouth_gray))
 
-            reports.append({
+            face_report = {
                 'bbox': (int(x), int(y), int(w), int(h)),
                 'laplacian_variance': float(lap_var),
                 'blockiness': float(blockiness),
                 'left_eye_specularity': left_spec,
                 'right_eye_specularity': right_spec,
                 'mouth_contrast': mouth_contrast,
-            })
+            }
+
+            # If we have MediaPipe landmarks, compute EAR and mouth opening
+            if landmarks is not None and MP_AVAILABLE:
+                try:
+                    # indices for key eye and mouth landmarks (MediaPipe face mesh)
+                    left_eye_idx = [33, 160, 158, 133, 153, 144]
+                    right_eye_idx = [263, 387, 385, 362, 380, 373]
+                    mouth_top = 13
+                    mouth_bottom = 14
+
+                    ear_l = self._landmark_eye_aspect_ratio(landmarks, left_eye_idx, (x, y, w, h))
+                    ear_r = self._landmark_eye_aspect_ratio(landmarks, right_eye_idx, (x, y, w, h))
+                    mouth_open = self._landmark_mouth_opening(landmarks, mouth_top, mouth_bottom, (x, y, w, h))
+
+                    face_report.update({
+                        'landmark_ear_left': ear_l,
+                        'landmark_ear_right': ear_r,
+                        'landmark_mouth_open': mouth_open,
+                        'landmarks_present': True,
+                    })
+                except Exception:
+                    face_report['landmarks_present'] = False
+            else:
+                face_report['landmarks_present'] = False
+
+            reports.append(face_report)
 
         return {'faces': reports}
 
@@ -161,10 +254,29 @@ class DeepfakeReporter:
         # if mouth contrast stays nearly constant across frames, it's suspicious
         mouth_var = float(np.var(mouth_contrast))
         lip_score = float(np.clip(1.0 - (mouth_var / (50.0 + mouth_var)), 0.0, 1.0))
+        # If landmarks provided, prefer landmark mouth variance across frames
+        try:
+            mouth_opens = np.array([m.get('landmark_mouth_open', np.nan) for m in per_face_metrics])
+            if np.isfinite(mouth_opens).sum() >= 2:
+                mvar = float(np.nanvar(mouth_opens))
+                lip_score = float(np.clip(1.0 - (mvar / (25.0 + mvar)), 0.0, 1.0))
+        except Exception:
+            pass
 
         # eye blink anomalies: count frames with very low specularity (eyes frozen)
         eye_freeze_ratio = float(np.mean((left_specs + right_specs) < 0.0005))
         eye_score = float(np.clip(eye_freeze_ratio * 5.0, 0.0, 1.0))
+        # If landmark EARs exist, use variance in EAR across frames as a blink proxy
+        try:
+            ears_l = np.array([m.get('landmark_ear_left', np.nan) for m in per_face_metrics])
+            ears_r = np.array([m.get('landmark_ear_right', np.nan) for m in per_face_metrics])
+            valid = np.isfinite(ears_l) & np.isfinite(ears_r)
+            if np.sum(valid) >= 2:
+                ear_var = float(np.nanvar((ears_l[valid] + ears_r[valid]) / 2.0))
+                # higher variance in EAR -> natural blinking -> lower fake score
+                eye_score = float(np.clip(1.0 - (ear_var * 50.0), 0.0, 1.0))
+        except Exception:
+            pass
 
         frame_count = len(per_face_metrics)
         if frame_count < 2:
