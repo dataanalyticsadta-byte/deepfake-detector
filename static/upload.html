@@ -1,21 +1,68 @@
-<!doctype html>
+﻿<!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
   <title>Deepfake Detector Upload</title>
   <style>
-    body { font-family: Arial, sans-serif; padding: 24px; max-width: 720px; }
-    label, button { display: block; margin: 12px 0; }
-    pre { background:#f8f8f8; padding:12px; border:1px solid #ddd; overflow:auto; }
+    :root {
+      --bg: #020617;
+      --surface: rgba(15, 23, 42, 0.97);
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #34d399;
+      --border: rgba(148, 163, 184, 0.16);
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin:0; min-height:100vh; background: linear-gradient(180deg, #071421 0%, #0f172a 100%); color: var(--text); }
+    main { width:min(1000px, calc(100% - 32px)); margin: 0 auto; padding: 36px 0; }
+    header { display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:20px; margin-bottom:30px; }
+    h1 { margin:0; font-size:clamp(2rem, 2.6vw, 2.8rem); }
+    p { margin:10px 0 0; color:var(--muted); max-width:680px; }
+    .nav { display:flex; flex-wrap:wrap; gap:12px; }
+    .nav a { color: var(--accent); text-decoration:none; font-weight:600; }
+    .panel { background: var(--surface); border:1px solid var(--border); border-radius:28px; padding:26px; box-shadow: 0 30px 80px rgba(0,0,0,0.35); }
+    .actions { display:flex; flex-wrap:wrap; gap:14px; margin-bottom:22px; }
+    input[type=file] { width:100%; max-width:360px; padding:14px 16px; border-radius:16px; border:1px solid var(--border); background: rgba(255,255,255,0.05); color: var(--text); }
+    button { border:none; border-radius:18px; padding:14px 22px; background: linear-gradient(135deg,#34d399,#22c55e); color:#fff; font-weight:700; cursor:pointer; }
+    button:hover { opacity:0.95; }
+    #message { color: var(--accent); margin-top:4px; }
+    .result { margin-top:24px; }
+    .result-card { background: rgba(255,255,255,0.04); border:1px solid rgba(148,163,184,0.12); border-radius:22px; padding:24px; }
+    .result-card h2 { margin:0 0 16px; font-size:1.1rem; }
+    .result-card p { margin:10px 0; color:var(--muted); line-height:1.6; }
+    .tags { display:flex; flex-wrap:wrap; gap:10px; margin:14px 0; }
+    .tag { display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border-radius:999px; background: rgba(56,189,248,0.14); color:#38bdf8; font-weight:700; }
+    .reason-list { list-style:none; padding:0; margin:18px 0 0; display:grid; gap:12px; }
+    .reason-item { padding:16px 18px; border-radius:18px; border:1px solid rgba(148,163,184,0.13); background: rgba(255,255,255,0.03); }
+    .reason-item strong { color:#fff; }
+    pre { margin-top:20px; background: rgba(15,23,42,0.95); color: #cbd5e1; padding:18px; border-radius:20px; overflow:auto; }
+    @media (max-width: 860px) { .actions { flex-direction:column; } }
   </style>
 </head>
 <body>
-  <h1>Upload Image or Video</h1>
-  <p>Supports JPEG/PNG/WebP and MP4/MOV/MKV formats.</p>
-  <input id="fileInput" type="file" accept="image/*,video/*" />
-  <button id="uploadBtn">Upload and Analyze</button>
-  <div id="message"></div>
-  <pre id="output"></pre>
+<main>
+  <header>
+    <div>
+      <p style="margin:0;color:var(--accent);letter-spacing:0.12em;text-transform:uppercase;font-size:0.85rem;">Deepfake Detector</p>
+      <h1>Upload file for deepfake analysis</h1>
+      <p>Choose an image or video and get visual scoring with clear model and heuristic status.</p>
+    </div>
+    <div class="nav">
+      <a href="/">Home</a>
+      <a href="/webcam">Webcam</a>
+    </div>
+  </header>
+
+  <section class="panel">
+    <div class="actions">
+      <input id="fileInput" type="file" accept="image/*,video/*" />
+      <button id="uploadBtn">Upload and Analyze</button>
+    </div>
+    <div id="message"></div>
+    <div id="output"></div>
+  </section>
+</main>
 
 <script>
 const input = document.getElementById('fileInput');
@@ -30,40 +77,42 @@ button.addEventListener('click', async () => {
     return;
   }
   message.textContent = 'Uploading...';
-  output.textContent = '';
+  output.innerHTML = '';
   const form = new FormData();
   form.append('file', file);
 
   try {
-    const resp = await fetch('/analyze', {
-      method: 'POST',
-      body: form,
-    });
+    const resp = await fetch('/analyze', { method: 'POST', body: form });
     const data = await resp.json();
-    // If breakdown present, render a friendly view
     if (data.breakdown) {
-      let html = `<div><strong>Prediction:</strong> ${data.prediction} (${data.confidence}%)</div>`;
-      html += `<div><strong>Heuristic score:</strong> ${data.fake_score ?? data.confidence}%</div>`;
+      let html = '<div class="result-card">';
+      html += '<h2>Prediction</h2>';
+      html += `<p><strong>${data.prediction}</strong> <span class="tag">${data.confidence}%</span></p>`;
+      html += '<div class="tags">';
+      html += `<span class="tag">Heuristic ${data.fake_score ?? data.confidence}%</span>`;
       if ('model_loaded' in data) {
-        html += `<div><strong>Model status:</strong> ${data.model_loaded ? `Loaded (${data.classifier_type || 'unknown'})` : 'No model loaded'}</div>`;
+        html += `<span class="tag">${data.model_loaded ? `Model loaded (${data.classifier_type || 'unknown'})` : 'No model loaded'}</span>`;
       }
-      html += `<div><strong>Overall:</strong> AI: ${data.breakdown.AI}% — Real: ${data.breakdown.Real}%</div>`;
       if (data.classifier_score !== undefined && data.classifier_score !== null) {
-        html += `<div><strong>Classifier:</strong> ${data.classifier_score}% — <strong>Combined:</strong> ${data.combined_score}%</div>`;
+        html += `<span class="tag">Classifier ${data.classifier_score}%</span>`;
+        html += `<span class="tag">Combined ${data.combined_score}%</span>`;
       }
+      html += '</div>';
+      html += `<p><strong>Overall:</strong> AI ${data.breakdown.AI}% — Real ${data.breakdown.Real}%</p>`;
       if (data.reason_scores) {
-        html += '<div><strong>Reason scores:</strong><ul>';
+        html += '<h2>Reason scores</h2><ul class="reason-list">';
         Object.entries(data.reason_scores).forEach(([label, score]) => {
-          const flagged = (data.reasons || []).includes(label) ? ' <em>(flagged)</em>' : '';
-          const explanation = (data.reason_details || {})[label] ? ' — ' + (data.reason_details || {})[label] : '';
-          html += `<li>${label}: ${score}%${flagged}${explanation}</li>`;
+          const flagged = (data.reasons || []).includes(label) ? ' <em style="color:#facc15;">(flagged)</em>' : '';
+          const explanation = (data.reason_details || {})[label] ? `<div style="margin-top:6px;color:var(--muted);">${data.reason_details[label]}</div>` : '';
+          html += `<li class="reason-item"><strong>${label}:</strong> ${score}%${flagged}${explanation}</li>`;
         });
-        html += '</ul></div>';
+        html += '</ul>';
       }
       html += `<pre>${JSON.stringify(data.report || {}, null, 2)}</pre>`;
+      html += '</div>';
       output.innerHTML = html;
     } else {
-      output.textContent = JSON.stringify(data, null, 2);
+      output.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
     }
     message.textContent = 'Analysis complete.';
   } catch (err) {

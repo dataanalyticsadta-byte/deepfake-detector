@@ -30,6 +30,8 @@ if os.path.isdir('frontend/dist'):
 
 @app.get("/")
 def home():
+    if os.path.exists(os.path.join('static', 'index.html')):
+        return FileResponse(os.path.join('static', 'index.html'))
     return {"message": "Deepfake Detector Prototype"}
 
 

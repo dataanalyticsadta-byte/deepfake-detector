@@ -1,32 +1,97 @@
-<!doctype html>
+﻿<!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
   <title>Realtime Deepfake Detector</title>
   <style>
-    body { font-family: Arial, sans-serif; display:flex; gap:16px; padding:16px }
-    video, canvas { border:1px solid #ccc; }
-    #status { margin-top:8px }
+    :root {
+      --bg: #020617;
+      --surface: rgba(15, 23, 42, 0.95);
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --border: rgba(148, 163, 184, 0.16);
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin:0; min-height:100vh; background: radial-gradient(circle at top, rgba(56,189,248,0.14), transparent 24%), linear-gradient(180deg, #020617 0%, #0f172a 100%); color: var(--text); }
+    main { width:min(1200px, calc(100% - 32px)); margin: 0 auto; padding: 32px 0; }
+    header { display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:16px; margin-bottom:28px; }
+    h1 { margin:0; font-size:clamp(2rem, 2.8vw, 3rem); line-height:1.02; }
+    p.lead { margin:12px 0 0; color:var(--muted); max-width:680px; }
+    .nav { display:flex; flex-wrap:wrap; gap:12px; }
+    .nav a { color: var(--accent); text-decoration:none; font-weight:600; }
+    .grid { display:grid; grid-template-columns: 1.4fr 1fr; gap:24px; }
+    .panel { background: var(--surface); border:1px solid var(--border); border-radius:28px; padding:24px; box-shadow: 0 30px 80px rgba(0,0,0,0.35); }
+    .video-wrapper { border-radius:24px; overflow:hidden; background:#000; min-height:360px; }
+    video { width:100%; height:100%; object-fit:cover; display:block; }
+    .status { margin-top:14px; color:var(--muted); display:flex; align-items:center; gap:10px; font-size:0.95rem; }
+    .status span { background: rgba(56,189,248,0.12); color: var(--accent); border-radius:999px; padding:6px 12px; }
+    .info-box { display:grid; gap:12px; margin-top:20px; }
+    .info-box div { background: rgba(255,255,255,0.04); border:1px solid rgba(148,163,184,0.12); border-radius:18px; padding:18px; }
+    .info-box strong { display:block; margin-bottom:6px; color:#fff; }
+    .result-list { margin:0; padding:0; list-style:none; display:grid; gap:12px; }
+    .result-item { background: rgba(255,255,255,0.03); border:1px solid rgba(148,163,184,0.1); border-radius:18px; padding:16px; }
+    .result-item strong { color:#fff; }
+    .badge { display:inline-flex; align-items:center; gap:8px; background: rgba(56,189,248,0.12); color: var(--accent); border-radius:999px; border:1px solid rgba(56,189,248,0.18); padding:9px 14px; font-weight:700; }
+    .alert { margin-top:20px; background: rgba(248,113,113,0.12); border:1px solid rgba(248,113,113,0.2); border-radius:20px; color:#fee2e2; padding:18px; }
+    a.btn { display:inline-flex; align-items:center; justify-content:center; gap:10px; padding:12px 20px; background: linear-gradient(135deg,#38bdf8,#0ea5e9); border-radius:16px; color:#fff; text-decoration:none; font-weight:700; }
+    @media (max-width: 920px) { .grid { grid-template-columns:1fr; } }
   </style>
 </head>
 <body>
-  <div>
-    <video id="video" autoplay playsinline width="480" height="360"></video>
-    <div id="status">Connecting...</div>
+<main>
+  <header>
+    <div>
+      <p style="margin:0;color:var(--accent);letter-spacing:0.16em;text-transform:uppercase;font-size:0.85rem;">Deepfake Detector</p>
+      <h1>Realtime webcam deepfake analysis</h1>
+      <p class="lead">Stream from your webcam, analyze frames in real time, and inspect the model and heuristic scores in one view.</p>
+    </div>
+    <nav class="nav">
+      <a class="btn" href="/upload">Upload Analyzer</a>
+      <a class="btn" href="/webcam">Refresh Webcam</a>
+    </nav>
+  </header>
+
+  <div class="grid">
+    <section class="panel video-panel">
+      <div class="video-wrapper"><video id="video" autoplay playsinline muted></video></div>
+      <div class="status"><span id="status">Connecting...</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="info-box">
+        <div>
+          <strong>Live prediction</strong>
+          <div id="pred" style="font-size:1.8rem; font-weight:800;">—</div>
+          <div id="predMeta" style="color:var(--muted); margin-top:8px;">Awaiting frames...</div>
+        </div>
+        <div id="modelInfo">
+          <strong>Model status</strong>
+          <div id="modelStatus" style="color:var(--muted);">Loading...</div>
+        </div>
+        <div id="heuristicInfo">
+          <strong>Heuristic score</strong>
+          <div id="heuristicScore" style="color:var(--muted);">—</div>
+        </div>
+      </div>
+      <div id="reasons"></div>
+      <div id="note" class="alert" style="display:none;">The classifier model is not loaded. This display is using heuristic-only scoring.</div>
+    </section>
   </div>
-  <div>
-    <canvas id="canvas" width="480" height="360" style="display:none"></canvas>
-    <div id="result"><strong>Prediction:</strong> <span id="pred">—</span> <span id="conf"></span></div>
-    <div id="reasons" style="margin-top:12px"></div>
-  </div>
+</main>
 
 <script>
 const video = document.getElementById('video');
-const canvas = document.getElementById('canvas');
+const canvas = document.createElement('canvas');
 const ctx = canvas.getContext('2d');
 const predEl = document.getElementById('pred');
-const confEl = document.getElementById('conf');
 const statusEl = document.getElementById('status');
+const reasonsEl = document.getElementById('reasons');
+const modelStatusEl = document.getElementById('modelStatus');
+const heuristicScoreEl = document.getElementById('heuristicScore');
+const noteEl = document.getElementById('note');
+const predMetaEl = document.getElementById('predMeta');
 
 let ws;
 function connect() {
@@ -34,7 +99,7 @@ function connect() {
   const wsUrl = (loc.protocol === 'https:' ? 'wss://' : 'ws://') + loc.host + '/ws';
   ws = new WebSocket(wsUrl);
   ws.onopen = () => { statusEl.textContent = 'Connected'; startStream(); };
-  ws.onmessage = (ev) => {
+  ws.onmessage = async (ev) => {
     try {
       const data = JSON.parse(ev.data);
       if (data.error) {
@@ -42,57 +107,46 @@ function connect() {
         return;
       }
       predEl.textContent = data.prediction || '—';
-      confEl.textContent = data.confidence !== undefined ? '(' + data.confidence + '%)' : '';
-
-      // Render reason scores and explanations when available
-      const reasonsEl = document.getElementById('reasons');
-      const extra = [];
-      if (data.fake_score !== undefined) {
-        extra.push('<div><strong>Heuristic score:</strong> ' + data.fake_score + '%</div>');
-      }
+      predMetaEl.innerHTML = data.confidence !== undefined ? `Confidence: <span class="badge">${data.confidence}%</span>` : 'Confidence unavailable';
+      heuristicScoreEl.textContent = data.fake_score !== undefined ? data.fake_score + '%' : '—';
       if ('model_loaded' in data) {
-        extra.push('<div><strong>Model status:</strong> ' + (data.model_loaded ? 'Loaded (' + (data.classifier_type || 'unknown') + ')' : 'No model loaded') + '</div>');
+        modelStatusEl.textContent = data.model_loaded ? `Loaded (${data.classifier_type || 'unknown'})` : 'No model loaded';
+        noteEl.style.display = data.model_loaded ? 'none' : 'block';
       }
-      if (data.reason_scores && Object.keys(data.reason_scores).length > 0) {
-        let html = extra.join('') + '<strong>Reason scores</strong>';
-        html += '<ul>';
+      if (data.reason_scores) {
+        let html = '<div class="result-item"><strong>Reason scores</strong></div><ul class="result-list">';
         Object.entries(data.reason_scores).forEach(([label, score]) => {
-          const flagged = (data.reasons || []).includes(label);
-          const explanation = (data.reason_details || {})[label] || '';
-          html += '<li>' + label + ': ' + score + '% ' + (flagged ? '<em>(flagged)</em>' : '') + (explanation ? ' — ' + explanation : '') + '</li>';
+          const flagged = (data.reasons || []).includes(label) ? '<span style="color:#facc15;"> (flagged)</span>' : '';
+          const explanation = (data.reason_details || {})[label] ? `<div class="small" style="margin-top:6px; color:var(--muted);">${data.reason_details[label]}</div>` : '';
+          html += `<li class="result-item"><strong>${label}:</strong> ${score}%${flagged}${explanation}</li>`;
         });
         html += '</ul>';
-        // show classifier/combined score if present
-        if (data.classifier_score !== undefined && data.classifier_score !== null) {
-          html = '<div><strong>Classifier:</strong> ' + data.classifier_score + '% — <strong>Combined:</strong> ' + data.combined_score + '%</div>' + html;
-        }
         reasonsEl.innerHTML = html;
-      } else if (extra.length) {
-        reasonsEl.innerHTML = extra.join('');
       } else {
         reasonsEl.innerHTML = '';
       }
-    } catch(e) { console.error(e); }
+    } catch (error) {
+      console.error(error);
+    }
   };
-  ws.onclose = () => { statusEl.textContent = 'Disconnected — retrying in 2s'; setTimeout(connect,2000); };
+  ws.onclose = () => { statusEl.textContent = 'Disconnected — retrying in 2s'; setTimeout(connect, 2000); };
 }
 
 async function startStream() {
-  if (!navigator.mediaDevices) {
-    statusEl.textContent = 'No webcam support';
-    return;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({video:true});
+    video.srcObject = stream;
+    canvas.width = 640;
+    canvas.height = 480;
+    setInterval(() => {
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+      ws.send(JSON.stringify({frame: dataUrl}));
+    }, 250);
+  } catch (err) {
+    statusEl.textContent = 'Webcam access denied or unavailable.';
   }
-  const stream = await navigator.mediaDevices.getUserMedia({video:true});
-  video.srcObject = stream;
-
-  const sendFrame = () => {
-    if (ws.readyState !== WebSocket.OPEN) return;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-    ws.send(JSON.stringify({frame: dataUrl}));
-  };
-  // send every 250ms
-  setInterval(sendFrame, 250);
 }
 
 connect();
