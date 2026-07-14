@@ -43,6 +43,10 @@ button.addEventListener('click', async () => {
     // If breakdown present, render a friendly view
     if (data.breakdown) {
       let html = `<div><strong>Prediction:</strong> ${data.prediction} (${data.confidence}%)</div>`;
+      html += `<div><strong>Heuristic score:</strong> ${data.fake_score ?? data.confidence}%</div>`;
+      if ('model_loaded' in data) {
+        html += `<div><strong>Model status:</strong> ${data.model_loaded ? `Loaded (${data.classifier_type || 'unknown'})` : 'No model loaded'}</div>`;
+      }
       html += `<div><strong>Overall:</strong> AI: ${data.breakdown.AI}% — Real: ${data.breakdown.Real}%</div>`;
       if (data.classifier_score !== undefined && data.classifier_score !== null) {
         html += `<div><strong>Classifier:</strong> ${data.classifier_score}% — <strong>Combined:</strong> ${data.combined_score}%</div>`;

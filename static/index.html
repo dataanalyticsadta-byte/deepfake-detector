@@ -46,8 +46,15 @@ function connect() {
 
       // Render reason scores and explanations when available
       const reasonsEl = document.getElementById('reasons');
+      const extra = [];
+      if (data.fake_score !== undefined) {
+        extra.push('<div><strong>Heuristic score:</strong> ' + data.fake_score + '%</div>');
+      }
+      if ('model_loaded' in data) {
+        extra.push('<div><strong>Model status:</strong> ' + (data.model_loaded ? 'Loaded (' + (data.classifier_type || 'unknown') + ')' : 'No model loaded') + '</div>');
+      }
       if (data.reason_scores && Object.keys(data.reason_scores).length > 0) {
-        let html = '<strong>Reason scores</strong>';
+        let html = extra.join('') + '<strong>Reason scores</strong>';
         html += '<ul>';
         Object.entries(data.reason_scores).forEach(([label, score]) => {
           const flagged = (data.reasons || []).includes(label);
@@ -60,6 +67,8 @@ function connect() {
           html = '<div><strong>Classifier:</strong> ' + data.classifier_score + '% — <strong>Combined:</strong> ' + data.combined_score + '%</div>' + html;
         }
         reasonsEl.innerHTML = html;
+      } else if (extra.length) {
+        reasonsEl.innerHTML = extra.join('');
       } else {
         reasonsEl.innerHTML = '';
       }

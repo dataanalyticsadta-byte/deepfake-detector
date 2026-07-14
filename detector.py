@@ -1,5 +1,6 @@
 ﻿from PIL import Image
 import os
+import numpy as np
 
 from reporter import DeepfakeReporter
 
@@ -9,7 +10,7 @@ reporter = DeepfakeReporter()
 CLASSIFIER = None
 CLASSIFIER_TYPE = None
 CLASSIFIER_PATH = None
-CLASSIFIER_MIX_WEIGHT = 0.7  # weight given to learned model vs heuristics (0-1)
+CLASSIFIER_MIX_WEIGHT = 0.65  # weight given to learned model vs heuristics (0-1)
 
 
 def _try_load_classifier():
@@ -96,7 +97,25 @@ def _score_from_report(report):
     if not values:
         return 0.0
 
-    return float(sum(values) / len(values))
+    values = np.asarray(values, dtype=np.float32)
+    max_score = float(np.max(values))
+    avg_score = float(np.mean(values))
+    strong_scores = values[values >= 0.5]
+    strong_mean = float(np.mean(strong_scores)) if strong_scores.size else 0.0
+    flagged_ratio = float(np.mean(values >= 0.5))
+    or_score = float(1.0 - np.prod(1.0 - values))
+
+    combined = (
+        0.35 * max_score +
+        0.25 * strong_mean +
+        0.15 * avg_score +
+        0.15 * flagged_ratio +
+        0.10 * or_score
+    )
+
+    # Slightly boost moderate suspicious signals so the detector isn't too conservative
+    combined = float(np.clip(combined + 0.03 * np.mean(values), 0.0, 1.0))
+    return combined
 
 
 def _classifier_predict_on_frames(frames):
@@ -163,15 +182,19 @@ def predict_frames(pil_frames):
     # get learned-model score if available
     clf_score = _classifier_predict_on_frames(frames)
     if clf_score is not None:
-        combined_score = float(CLASSIFIER_MIX_WEIGHT * clf_score + (1.0 - CLASSIFIER_MIX_WEIGHT) * fake_score)
+        combined_score = float(np.clip(CLASSIFIER_MIX_WEIGHT * clf_score + (1.0 - CLASSIFIER_MIX_WEIGHT) * fake_score, 0.0, 1.0))
+        if clf_score > 0.8:
+            combined_score = max(combined_score, float(clf_score))
+        elif clf_score > 0.55 and fake_score > 0.35:
+            combined_score = max(combined_score, float(fake_score))
     else:
         combined_score = float(fake_score)
 
     # Use combined score for final verdict when classifier available
     score_for_verdict = combined_score
-    if score_for_verdict < 0.25:
+    if score_for_verdict < 0.35:
         prediction = "Looks Real"
-    elif score_for_verdict < 0.65:
+    elif score_for_verdict < 0.58:
         prediction = "Potentially Altered"
     else:
         prediction = "Potential Fake"
@@ -191,8 +214,11 @@ def predict_frames(pil_frames):
     return {
         "prediction": prediction,
         "confidence": round(combined_score * 100, 2),
+        "fake_score": round(fake_score * 100, 2),
         "classifier_score": None if clf_score is None else round(clf_score * 100, 2),
         "combined_score": round(combined_score * 100, 2),
+        "model_loaded": CLASSIFIER is not None,
+        "classifier_type": CLASSIFIER_TYPE,
         "breakdown": {"AI": ai_percent, "Real": real_percent},
         "reason_scores": reason_scores,
         "reasons": reasons,

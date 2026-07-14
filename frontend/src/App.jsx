@@ -83,6 +83,12 @@ export default function App(){
                 </ul>
               </div>
             )}
+            {prediction?.fake_score !== undefined && (
+              <div><strong>Heuristic score:</strong> {prediction.fake_score}%</div>
+            )}
+            {'model_loaded' in prediction && (
+              <div><strong>Model status:</strong> {prediction.model_loaded ? `Loaded (${prediction.classifier_type || 'unknown'})` : 'No model loaded'}</div>
+            )}
           </div>
         </div>
         <div className="right">
@@ -105,6 +111,12 @@ export default function App(){
                     ))}
                   </ul>
                 </div>
+              )}
+              {uploadResult.fake_score !== undefined && (
+                <div><strong>Heuristic score:</strong> {uploadResult.fake_score}%</div>
+              )}
+              {'model_loaded' in uploadResult && (
+                <div><strong>Model status:</strong> {uploadResult.model_loaded ? `Loaded (${uploadResult.classifier_type || 'unknown'})` : 'No model loaded'}</div>
               )}
               <pre style={{background:'#f6f6f6', padding:8}}>{JSON.stringify(uploadResult.report || {}, null, 2)}</pre>
             </div>
