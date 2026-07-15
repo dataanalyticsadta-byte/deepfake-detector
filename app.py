@@ -1,4 +1,5 @@
-from fastapi import FastAPI, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 import shutil
 import os
@@ -12,6 +13,14 @@ from reporter import DeepfakeReporter, analyze_video_file
 
 app = FastAPI(title="Deepfake Detector Prototype")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 UPLOAD_DIR = "uploads"
 SUPPORTED_IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp', '.bmp', '.tiff', '.gif'}
 SUPPORTED_VIDEO_EXTENSIONS = {'.mp4', '.mov', '.avi', '.mkv', '.webm', '.flv', '.mpeg', '.mpg'}
@@ -19,30 +28,49 @@ SUPPORTED_VIDEO_EXTENSIONS = {'.mp4', '.mov', '.avi', '.mkv', '.webm', '.flv', '
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 from fastapi.staticfiles import StaticFiles
 
-# Serve frontend files from /static
+FRONTEND_DIST = os.path.join('frontend', 'dist')
+FRONTEND_INDEX = os.path.join(FRONTEND_DIST, 'index.html')
+
+# Serve legacy static assets from /static
 if os.path.isdir('static'):
     app.mount('/static', StaticFiles(directory='static'), name='static')
 
-# If a frontend build exists, serve it at root paths.
-if os.path.isdir('frontend/dist'):
-    app.mount('/', StaticFiles(directory='frontend/dist', html=True), name='frontend')
+# Serve built React assets from /assets
+if os.path.isdir(FRONTEND_DIST):
+    assets_dir = os.path.join(FRONTEND_DIST, 'assets')
+    if os.path.isdir(assets_dir):
+        app.mount('/assets', StaticFiles(directory=assets_dir), name='frontend_assets')
+
+# Auth router (simple SQLite + JWT scaffolding)
+try:
+    from auth import router as auth_router
+    app.include_router(auth_router, prefix="/api/auth")
+except Exception:
+    # auth optional if dependencies are missing during initial dev
+    pass
+
+
+def _serve_frontend_index():
+    if os.path.exists(FRONTEND_INDEX):
+        return FileResponse(FRONTEND_INDEX)
+    if os.path.exists(os.path.join('static', 'index.html')):
+        return FileResponse(os.path.join('static', 'index.html'))
+    raise HTTPException(status_code=404, detail='Frontend not found')
 
 
 @app.get("/")
 def home():
-    if os.path.exists(os.path.join('static', 'index.html')):
-        return FileResponse(os.path.join('static', 'index.html'))
-    return {"message": "Deepfake Detector Prototype"}
+    return _serve_frontend_index()
 
 
 @app.get('/webcam')
 def webcam_page():
-    return FileResponse(os.path.join('static', 'index.html'))
+    return _serve_frontend_index()
 
 
 @app.get('/upload')
 def upload_page():
-    return FileResponse(os.path.join('static', 'upload.html'))
+    return _serve_frontend_index()
 
 
 @app.post("/detect")
@@ -104,6 +132,13 @@ async def analyze(file: UploadFile):
             return {'error': 'Uploaded video could not be parsed. Supported formats: MP4, MOV, AVI, MKV, WEBM, FLV, MPEG.'}
 
     return {'error': 'Unsupported file type. Supported uploads are image and video files, not plain text.'}
+
+
+@app.get('/{full_path:path}')
+def catch_all(full_path: str):
+    if full_path.startswith('api/') or full_path.startswith('assets/') or full_path.startswith('static/'):
+        raise HTTPException(status_code=404, detail='Not found')
+    return _serve_frontend_index()
 
 
 @app.websocket('/ws')

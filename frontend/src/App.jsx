@@ -1,130 +1,75 @@
-import React, { useRef, useState, useEffect } from 'react'
+import React, { useState } from 'react'
+import Home from './pages/Home'
+import Upload from './pages/Upload'
+import Webcam from './pages/Webcam'
+import Login from './pages/Login'
+import Register from './pages/Register'
+import './styles.css'
 
-export default function App(){
-  const videoRef = useRef(null)
-  const canvasRef = useRef(null)
-  const [wsStatus, setWsStatus] = useState('disconnected')
-  const [prediction, setPrediction] = useState(null)
-  const wsRef = useRef(null)
-  const [uploadResult, setUploadResult] = useState(null)
+const normalizePath = (path) => path.replace(/\/?$/, '') || '/'
 
-  useEffect(()=>{
-    const loc = window.location
-    const wsUrl = (loc.protocol === 'https:' ? 'wss://' : 'ws://') + loc.host + '/ws'
-    const ws = new WebSocket(wsUrl)
-    ws.onopen = ()=> setWsStatus('connected')
-    ws.onclose = ()=> setWsStatus('disconnected')
-    ws.onmessage = (ev)=>{
-      try{ const d = JSON.parse(ev.data); setPrediction(d) }catch(e){ console.error(e) }
-    }
-    wsRef.current = ws
-    return ()=> ws.close()
+export default function App() {
+  const [route, setRoute] = useState(normalizePath(window.location.pathname))
+  const [token, setToken] = useState(window.localStorage.getItem('deepfake_token'))
+
+  React.useEffect(() => {
+    const onPop = () => setRoute(normalizePath(window.location.pathname))
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
   }, [])
 
-  async function startCamera(){
-    const stream = await navigator.mediaDevices.getUserMedia({video:true})
-    videoRef.current.srcObject = stream
-    videoRef.current.play()
-    const interval = setInterval(()=>{
-      if(!wsRef.current || wsRef.current.readyState!==WebSocket.OPEN) return
-      const canvas = canvasRef.current
-      const ctx = canvas.getContext('2d')
-      ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height)
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.7)
-      wsRef.current.send(JSON.stringify({frame: dataUrl}))
-    }, 350)
-    return ()=> clearInterval(interval)
+  const navigate = (path) => {
+    window.history.pushState({}, '', path)
+    setRoute(normalizePath(path))
   }
 
-  useEffect(()=>{ let stop; startCamera().then(s=>stop=s).catch(()=>{}); return ()=> stop && stop() }, [])
+  const handleLogout = () => {
+    window.localStorage.removeItem('deepfake_token')
+    setToken(null)
+    navigate('/')
+  }
 
-  async function handleUpload(e){
-    const f = e.target.files[0]
-    if(!f) return
-    const form = new FormData(); form.append('file', f)
-    setUploadResult('uploading...')
-    try{
-      const res = await fetch('/analyze', {method:'POST', body: form})
-      const j = await res.json()
-      setUploadResult(j)
-    }catch(err){ setUploadResult('error: '+err.message) }
+  const handleLogin = (newToken) => {
+    setToken(newToken)
+    navigate('/')
   }
 
   return (
-    <div className="app">
-      <h1>Realtime Deepfake Detector</h1>
-      <div className="container">
-        <div className="left">
-          <video ref={videoRef} width={480} height={360} />
-          <canvas ref={canvasRef} width={480} height={360} style={{display:'none'}} />
-          <div>Status: {wsStatus}</div>
-          <div>
-            <strong>Realtime prediction:</strong>
-            <div>{prediction ? `${prediction.prediction} (${prediction.confidence}%)` : '—'}</div>
-            {prediction?.breakdown && (
-              <div>
-                <strong>Overall:</strong>
-                <div>AI: {prediction.breakdown.AI}% — Real: {prediction.breakdown.Real}%</div>
-                {prediction?.classifier_score !== undefined && prediction.classifier_score !== null && (
-                  <div>Classifier: {prediction.classifier_score}% — Combined: {prediction.combined_score}%</div>
-                )}
-              </div>
-            )}
-            {prediction?.reason_scores && (
-              <div>
-                <strong>Reason scores:</strong>
-                <ul>
-                  {Object.entries(prediction.reason_scores).map(([label, score]) => (
-                    <li key={label}>
-                      {label}: {score}% {prediction.reasons?.includes(label) ? '(flagged)' : ''}
-                      {prediction.reason_details?.[label] ? ` — ${prediction.reason_details[label]}` : ''}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {prediction?.fake_score !== undefined && (
-              <div><strong>Heuristic score:</strong> {prediction.fake_score}%</div>
-            )}
-            {'model_loaded' in prediction && (
-              <div><strong>Model status:</strong> {prediction.model_loaded ? `Loaded (${prediction.classifier_type || 'unknown'})` : 'No model loaded'}</div>
-            )}
+    <div className="app-shell">
+      <header className="topbar">
+        <div>
+          <p className="eyebrow">Deepfake Detector</p>
+          <h1>Realtime analysis for webcam, image, and video uploads</h1>
+        </div>
+
+        <nav className="nav-menu">
+          <button onClick={() => navigate('/')}>Home</button>
+          <button onClick={() => navigate('/webcam')}>Webcam</button>
+          <button onClick={() => navigate('/upload')}>Upload</button>
+          <button onClick={() => navigate('/login')}>Login</button>
+          <button onClick={() => navigate('/register')}>Register</button>
+          {token && <button onClick={handleLogout}>Logout</button>}
+        </nav>
+      </header>
+
+      <main className="page-body">
+        {route === '/' && <Home token={token} navigate={navigate} />}
+        {route === '/webcam' && <Webcam token={token} />}
+        {route === '/upload' && <Upload token={token} />}
+        {route === '/login' && <Login onLogin={handleLogin} />}
+        {route === '/register' && <Register onRegistered={() => navigate('/login')} />}
+        {['/', '/webcam', '/upload', '/login', '/register'].includes(route) === false && (
+          <div className="page-card">
+            <h2>Page not found</h2>
+            <p>The page you requested does not exist. Use the navigation above.</p>
           </div>
-        </div>
-        <div className="right">
-          <h2>Upload file</h2>
-          <input type="file" accept="image/*,video/*" onChange={handleUpload} />
-          <h3>Result</h3>
-          {uploadResult && typeof uploadResult === 'object' ? (
-            <div>
-              <div><strong>Prediction:</strong> {uploadResult.prediction} ({uploadResult.confidence}%)</div>
-              {uploadResult.breakdown && <div><strong>Overall:</strong> AI: {uploadResult.breakdown.AI}% — Real: {uploadResult.breakdown.Real}%</div>}
-              {uploadResult.classifier_score !== undefined && uploadResult.classifier_score !== null && (
-                <div><strong>Classifier:</strong> {uploadResult.classifier_score}% — <strong>Combined:</strong> {uploadResult.combined_score}%</div>
-              )}
-              {uploadResult.reason_scores && (
-                <div>
-                  <strong>Reason scores:</strong>
-                  <ul>
-                    {Object.entries(uploadResult.reason_scores).map(([label, score]) => (
-                      <li key={label}>{label}: {score}% {uploadResult.reasons?.includes(label) ? '(flagged)' : ''}{uploadResult.reason_details?.[label] ? ` — ${uploadResult.reason_details[label]}` : ''}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {uploadResult.fake_score !== undefined && (
-                <div><strong>Heuristic score:</strong> {uploadResult.fake_score}%</div>
-              )}
-              {'model_loaded' in uploadResult && (
-                <div><strong>Model status:</strong> {uploadResult.model_loaded ? `Loaded (${uploadResult.classifier_type || 'unknown'})` : 'No model loaded'}</div>
-              )}
-              <pre style={{background:'#f6f6f6', padding:8}}>{JSON.stringify(uploadResult.report || {}, null, 2)}</pre>
-            </div>
-          ) : (
-            <pre>{uploadResult}</pre>
-          )}
-        </div>
-      </div>
+        )}
+      </main>
+
+      <footer className="footer-bar">
+        <span>FastAPI + React</span>
+        <span>{token ? 'Authenticated session active' : 'Unauthenticated mode'}</span>
+      </footer>
     </div>
   )
 }

@@ -8,7 +8,10 @@ opencv-python
 numpy
 scikit-image
 # Optional (for classifier training / improved detector):
-tensorflow>=2.11  # optional: required for Keras .h5 models
+# tensorflow>=2.11  # optional: required for Keras .h5 models
+# If you need TensorFlow, install it manually in a compatible Python/conda environment.
 onnxruntime       # optional: required for ONNX models
 mediapipe         # optional: for improved face localization and landmarks
 requests          # used by scripts/download_model.py
+python-jose[cryptography]
+passlib[bcrypt]

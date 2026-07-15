@@ -4,29 +4,42 @@ A prototype realtime deepfake detection app with webcam streaming, image/video u
 
 ## Install
 
+### Backend
 ```bash
 pip install -r requirements.txt
 ```
 
+### Frontend
+```bash
+cd frontend
+npm.cmd install
+npm.cmd run build
+```
+
 ## Run
 
-On Windows, use Python to run Uvicorn directly:
+After building the frontend, start the FastAPI server:
 
 ```powershell
 cd c:\Users\kilbi\.vscode\deepfake-detector
 python -m uvicorn app:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-On Linux/macOS with `uvicorn` installed in PATH:
+Open the site at `http://localhost:8000/`.
 
-```bash
-uvicorn app:app --host 0.0.0.0 --port 8000 --reload
+If you want to run the frontend in development mode instead of the built site:
+
+```powershell
+cd frontend
+npm.cmd run dev -- --host 127.0.0.1 --port 5173
 ```
 
 ## Use
 
+- Web app homepage: `http://localhost:8000/`
 - Realtime webcam detection: `http://localhost:8000/webcam`
 - Upload image/video file: `http://localhost:8000/upload`
+- Auth endpoints: `/api/auth/register` and `/api/auth/login`
 
 Supported uploads: JPG, JPEG, PNG, WEBP, BMP, TIFF, GIF, MP4, MOV, AVI, MKV, WEBM, FLV, MPEG.
 
